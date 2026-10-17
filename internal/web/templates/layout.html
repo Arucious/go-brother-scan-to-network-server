@@ -1,0 +1,24 @@
+{{define "header"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Brother Scan to Network</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <strong>Brother Scan to Network</strong>
+  <nav><a href="/">Status</a><a href="/config">Configuration</a></nav>
+</header>
+<main>
+{{if .Flash}}<p class="flash">{{.Flash}}</p>{{end}}
+{{if .Error}}<pre class="error">{{.Error}}</pre>{{end}}
+{{end}}
+
+{{define "footer"}}
+</main>
+<footer><a href="https://github.com/aurimasniekis/go-brother-scan-to-network-server">go-brother-scan-to-network-server</a></footer>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,131 @@
+{{template "header" .}}
+{{$snap := .Snap}}
+{{if not $snap.Config}}
+  <section>
+    <h2>Not configured</h2>
+    <p>Open <a href="/config">Configuration</a> to set the printer address and at least one target.</p>
+  </section>
+{{else}}
+  <section>
+    <div class="row">
+      <h2>Printer</h2>
+      <form method="post" action="/register"><button>Re-register now</button></form>
+    </div>
+    <dl>
+      <dt>Printer</dt><dd>{{$snap.Config.Printer.Address}}</dd>
+      <dt>Events to</dt><dd>{{if $snap.HostIP}}{{$snap.HostIP}}:{{$snap.Config.Server.EventPort}}/udp{{else}}detecting…{{end}}</dd>
+      <dt>Scanner</dt><dd>{{if $snap.Scanning}}<span class="badge running">scanning</span>{{else}}idle{{end}}</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>New scan</h2>
+    <form method="post" action="/scan" class="scan-form" data-keep>
+      <input type="hidden" name="custom" value="1">
+      <label>Save to
+        <select name="target">{{range $snap.Config.Targets}}<option>{{.Name}}</option>{{end}}</select>
+      </label>
+      <label>File type
+        <select name="format">{{range formats}}<option value="{{.}}">{{label .}}</option>{{end}}</select>
+      </label>
+      <label>Color
+        <select name="color">{{range colors}}<option value="{{.}}"{{if eq . "gray"}} selected{{end}}>{{label .}}</option>{{end}}</select>
+      </label>
+      <label>Resolution
+        <select name="resolution">{{range resolutions}}<option value="{{.}}"{{if eq . 300}} selected{{end}}>{{label .}}</option>{{end}}</select>
+      </label>
+      <label>Page size
+        <select name="page_size">{{range pageSizes}}<option value="{{.}}">{{label .}}</option>{{end}}</select>
+      </label>
+      {{if eq $snap.Config.Printer.ScanProtocol "escl"}}
+      <label>Source
+        <select name="source">{{range sources}}<option value="{{.}}">{{label .}}</option>{{end}}</select>
+      </label>
+      {{end}}
+      <div class="scan-go">
+        <button class="primary">Scan</button>
+        <small>{{if ne $snap.Config.Printer.ScanProtocol "escl"}}Uses the document feeder when paper is loaded, otherwise the glass.{{end}}</small>
+      </div>
+    </form>
+  </section>
+
+  {{range $t := $snap.Config.Targets}}
+  <section>
+    <div class="row">
+      <h2>{{$t.Name}}</h2>
+      <form method="post" action="/test"><input type="hidden" name="target" value="{{$t.Name}}"><button>Test destination</button></form>
+    </div>
+    <p class="muted">{{$t.Destination.Type}}: {{destination $t.Destination}}</p>
+    <table>
+      <thead><tr><th>Function</th><th>Default settings</th><th>Registration</th><th></th></tr></thead>
+      <tbody>
+      {{range $fn := functionNames $t}}
+        {{$p := profile $t $fn}}
+        <tr>
+          <td>{{$fn}}</td>
+          <td>{{label $p.Format}} · {{label $p.Color}} · {{$p.Resolution}} dpi · {{label $p.PageSize}}</td>
+          <td>
+            {{range $snap.Registrations}}{{if and (eq .Target $t.Name) (eq .Function $fn)}}
+              {{if .Error}}<span class="badge failed" title="{{.Error}}">failed</span> <small>{{.Error}}</small>
+              {{else if .LastOK.IsZero}}<span class="badge">pending</span>
+              {{else}}<span class="badge done">ok</span> <small>{{ago .LastOK}} via {{.Method}}</small>{{end}}
+            {{end}}{{end}}
+          </td>
+          <td><form method="post" action="/scan"><input type="hidden" name="target" value="{{$t.Name}}"><input type="hidden" name="function" value="{{$fn}}"><button>Scan now</button></form></td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    <p class="muted"><small>Options chosen on the printer panel override these defaults for button scans.</small></p>
+  </section>
+  {{end}}
+{{end}}
+
+<section>
+  <h2>Recent scans</h2>
+  {{if not $snap.Jobs}}<p class="muted">No scans yet. Press <em>Scan → PC</em> on the printer and pick one of the targets above.</p>
+  {{else}}
+  <table class="jobs">
+    <thead><tr><th>#</th><th>Started</th><th>Target</th><th>Settings</th><th>Status</th><th>Files</th></tr></thead>
+    <tbody>
+    {{range $j := $snap.Jobs}}
+      <tr>
+        <td>{{$j.ID}}</td>
+        <td>{{clock $j.Started}}<br><small>{{$j.Trigger}}{{with duration $j.Started $j.Finished}} · {{.}}{{end}}</small></td>
+        <td>{{$j.Target}}<br><small>{{$j.Function}}</small></td>
+        <td>
+          {{with $j.Settings}}
+            {{if .From}}<span class="badge {{.From}}">{{.From}}</span>{{end}}
+            {{if .FileType}}{{.FileType}}{{end}}
+            <br><small>{{if .Color}}{{.Color}}{{end}}{{if .DPI}} · {{.DPI}} dpi{{end}}{{if .PageSize}} · {{.PageSize}}{{end}}</small>
+          {{end}}
+        </td>
+        <td><span class="badge {{$j.Status}}">{{$j.Status}}</span><br><small>{{$j.Pages}} page{{if ne $j.Pages 1}}s{{end}}</small></td>
+        <td>
+          {{if $j.Error}}<small class="err">{{$j.Error}}</small>{{end}}
+          {{range $i, $f := $j.Files}}
+            <div class="file">
+              <a href="/download/{{$j.ID}}/{{$i}}?inline" target="_blank" title="{{$f.Location}}">{{$f.Base}}</a>
+              <small>{{size $f.Size}}</small>
+              <a href="/download/{{$j.ID}}/{{$i}}" class="dl" title="Download">⬇</a>
+            </div>
+          {{end}}
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</section>
+<script>
+  // Refresh for new scans, but never while the scan form is being edited.
+  var editing = false;
+  document.querySelectorAll("form[data-keep]").forEach(function (f) {
+    f.addEventListener("input", function () { editing = true; });
+    f.addEventListener("focusin", function () { editing = true; });
+  });
+  setInterval(function () {
+    if (!document.hidden && !editing) location.replace("/");
+  }, 10000);
+</script>
+{{template "footer" .}}

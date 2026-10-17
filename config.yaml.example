@@ -1,0 +1,111 @@
+# go-brother-scan-to-network-server configuration.
+#
+# Copy to config.yaml (or /data/config.yaml in Docker) and adjust. The server
+# writes this file on first start when no config exists, and it can be edited
+# in the web UI (Configuration page).
+#
+# Values may reference environment variables with ${NAME}, handy for secrets in
+# Docker (e.g. password: ${SMB_PASSWORD}). Use $$ for a literal $.
+
+printer:
+  # IP address or hostname of the Brother device.
+  address: 192.168.1.50
+  # How to register with the printer: auto (phoenix, then snmp), phoenix or snmp.
+  # registration: auto
+  # phoenix_user: Public
+  # phoenix_password: "0000"
+  # snmp_community: internal
+  # How pages are pulled: native (Brother protocol on TCP 54921, required for
+  # the panel button) or escl (AirScan; only works for "Scan now").
+  # scan_protocol: native
+
+server:
+  # Address the printer sends button events to. Detected automatically from the
+  # route to the printer; set it when running in Docker bridge networking.
+  # advertise_ip: 192.168.1.10
+  # event_port: 54925
+
+web:
+  listen: ":8080"
+  # Optional basic auth for the web UI.
+  # username: admin
+  # password: ${WEB_PASSWORD}
+
+# Each target shows up as a computer in the printer's "Scan to PC" list (name:
+# at most 15 characters). Every target has its own destination.
+#
+# Common target options:
+#   filename:  output path template without extension. Fields: .Time, .Target,
+#              .Function. Slashes create sub-directories, e.g.
+#              '{{.Time.Format "2006/01"}}/scan_{{.Time.Format "02_150405"}}'
+#   pin:       optional numeric PIN asked on the printer panel
+#   functions: panel functions to offer (file, image, ocr, email). Omit to
+#              offer all four. Defaults per function:
+#                file:  pdf,  gray,  300 dpi     ocr:   pdf,  gray,  300 dpi
+#                email: pdf,  color, 200 dpi     image: jpeg, color, 300 dpi
+#              Options: format (pdf | pdf-single | tiff | tiff-single | jpeg | png | bmp),
+#              color (color | gray | bw), resolution (100 | 200 | 300 | 600),
+#              page_size (a4 | letter | legal | max), source (auto | platen | adf; eSCL only).
+#              Options chosen on the printer panel override these.
+targets:
+
+  # --- SMB / Windows share / NAS ---------------------------------------------
+  - name: NAS
+    filename: '{{.Time.Format "2006-01-02_15-04-05"}}_{{.Function}}'
+    functions:
+      file: {}
+      image: {color: color, resolution: 300}
+    destination:
+      type: smb
+      host: 192.168.1.20
+      share: scans
+      path: inbox              # directory inside the share (created if missing)
+      username: scanner        # empty = guest login
+      password: ${SMB_PASSWORD}
+      # domain: WORKGROUP
+      # port: 445
+
+  # --- Local folder (e.g. a Docker volume) -----------------------------------
+  - name: Local
+    functions:
+      file: {format: pdf-single, color: bw}
+    destination:
+      type: local
+      path: /scans
+
+  # --- FTP / FTPS -------------------------------------------------------------
+  - name: FTP
+    functions:
+      file: {}
+    destination:
+      type: ftp
+      host: ftp.example.com
+      path: scans              # relative to the login directory
+      username: scanner        # empty = anonymous
+      password: ${FTP_PASSWORD}
+      # tls: explicit          # "" (plain), explicit (AUTH TLS) or implicit (port 990)
+      # insecure_skip_verify: false
+      # port: 21
+
+  # --- S3 and S3-compatible storage ------------------------------------------
+  - name: Cloud
+    functions:
+      file: {}
+    destination:
+      type: s3
+      bucket: my-scans
+      path: brother            # key prefix
+      region: eu-central-1
+      access_key_id: ${S3_ACCESS_KEY_ID}
+      secret_access_key: ${S3_SECRET_ACCESS_KEY}
+      # storage_class: STANDARD_IA
+      # session_token: ${S3_SESSION_TOKEN}
+      #
+      # Leave endpoint empty for AWS. For S3-compatible services:
+      #   MinIO / Garage / SeaweedFS:  endpoint: http://192.168.1.20:9000
+      #                                path_style: true
+      #   Cloudflare R2:               endpoint: https://<account-id>.r2.cloudflarestorage.com
+      #                                region: auto
+      #   Backblaze B2:                endpoint: https://s3.us-west-004.backblazeb2.com
+      #   Wasabi:                      endpoint: https://s3.eu-central-1.wasabisys.com
+      # insecure_skip_verify: false  # accept self-signed TLS certificates

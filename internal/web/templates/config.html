@@ -1,0 +1,11 @@
+{{template "header" .}}
+<section>
+  <h2>Configuration</h2>
+  <p class="muted">Editing <code>{{.Path}}</code>. The file is validated before it is saved and applied without a restart.
+  <code>${VAR}</code> references are expanded from the environment.</p>
+  <form method="post" action="/config">
+    <textarea name="config" spellcheck="false" rows="32">{{.Config}}</textarea>
+    <p><button class="primary">Save &amp; apply</button></p>
+  </form>
+</section>
+{{template "footer" .}}

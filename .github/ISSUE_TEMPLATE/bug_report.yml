@@ -1,0 +1,52 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Device details and logs make protocol issues much easier to fix.
+  - type: input
+    id: printer
+    attributes:
+      label: Printer model and firmware
+      description: Model from the printer label, firmware from its web page (Network → Status) or `snmpget -v1 -c public <printer> 1.3.6.1.2.1.1.1.0`.
+      placeholder: Brother MFC-L2800DW, firmware 1.32
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Server version
+      description: Output of `brother-scan-server -version` or the Docker image tag.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation
+      options: [Docker (host network), Docker (bridge network), Binary, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did on the printer or in the web UI, what you expected and what happened instead (panel options, destination type, …).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Server log with `LOG_LEVEL=debug` around the problem. Remove passwords.
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Relevant part of config.yaml, with secrets removed.
+      render: yaml
+  - type: markdown
+    attributes:
+      value: |
+        For scan protocol problems a raw capture helps a lot: set `BRSCAN_CAPTURE_DIR=/data/captures`, reproduce once and attach the `.bin` file (it contains the scanned page).

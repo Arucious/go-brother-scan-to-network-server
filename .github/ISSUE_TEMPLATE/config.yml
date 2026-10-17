@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Printer compatibility report
+    url: https://github.com/aurimasniekis/go-brother-scan-to-network-server/discussions
+    about: Tell us whether your Brother model works — success reports help other users too.

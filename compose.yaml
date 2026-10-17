@@ -1,0 +1,22 @@
+services:
+  brother-scan:
+    image: aurimasniekis/go-brother-scan-to-network-server:latest # or ghcr.io/aurimasniekis/go-brother-scan-to-network-server
+    container_name: brother-scan
+    restart: unless-stopped
+    # Host networking lets the printer reach the UDP event port and lets the
+    # server detect the LAN address to advertise. With bridge networking,
+    # publish 54925/udp and 8080 and set server.advertise_ip in the config.
+    network_mode: host
+    environment:
+      CONFIG_PATH: /data/config.yaml
+      # Local time for {{.Time}} in filenames (the container defaults to UTC).
+      TZ: Europe/Vilnius
+      # Secrets referenced from config.yaml as ${NAME}; set only what you use.
+      SMB_PASSWORD: change-me
+      # FTP_PASSWORD: change-me
+      # S3_ACCESS_KEY_ID: change-me
+      # S3_SECRET_ACCESS_KEY: change-me
+    volumes:
+      - ./data:/data
+      # Only needed for "local" destinations.
+      - ./scans:/scans

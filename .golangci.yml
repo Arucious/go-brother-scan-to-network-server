@@ -1,0 +1,29 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - nilerr
+    - unconvert
+    - usestdlibvars
+  settings:
+    errcheck:
+      exclude-functions:
+        # Best-effort cleanup on connections and files already being discarded.
+        - (io.Closer).Close
+        - (net.Conn).Close
+        - (*os.File).Close
+        - (*github.com/jlaffaye/ftp.ServerConn).Quit
+        - (*github.com/hirochachacha/go-smb2.Share).Remove
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt

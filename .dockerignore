@@ -1,0 +1,11 @@
+.git
+bin
+data
+scans
+config.yaml
+*.log
+docs
+.github
+dist
+*.md
+!README.md
