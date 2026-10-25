@@ -1,5 +1,12 @@
 <h1 align="center">Brother Scan to Network</h1>
 
+This fork adds source-IP filtering for button events, browser cross-origin
+protection, fail-closed web access on invalid configuration, confined local file
+access, and a patched Go toolchain. Build this fork from source to include those
+changes; the upstream images referenced below do not include them. See
+[SECURITY.md](SECURITY.md) for deployment guidance. If the configuration becomes
+invalid, repair it on disk and restart the service.
+
 <p align="center">
   <b>Press <i>Scan → PC</i> on your Brother printer and the document lands on your NAS, FTP server or S3 bucket.</b><br>
   No Brother software, no PC left running. One small Go service, one Docker container.
