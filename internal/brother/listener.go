@@ -13,7 +13,7 @@ type EventHandler func(ev Event, from *net.UDPAddr)
 // Listen receives button events on addr (e.g. ":54925") until ctx is done.
 // Every valid event is acknowledged by echoing the datagram back to the
 // device, exactly like NETserver does.
-func Listen(ctx context.Context, addr string, log *slog.Logger, handle EventHandler) error {
+func Listen(ctx context.Context, addr string, log *slog.Logger, accept func(*net.UDPAddr) bool, handle EventHandler) error {
 	conn, err := net.ListenPacket("udp4", addr)
 	if err != nil {
 		return err
@@ -34,6 +34,12 @@ func Listen(ctx context.Context, addr string, log *slog.Logger, handle EventHand
 			continue
 		}
 		from, _ := src.(*net.UDPAddr)
+		// Check the source before parsing or acknowledging to avoid responding
+		// to arbitrary hosts. A nil filter fails closed.
+		if accept == nil || !accept(from) {
+			log.Debug("ignoring event from untrusted sender", "from", src)
+			continue
+		}
 		packet := append([]byte(nil), buf[:n]...)
 
 		ev, ok, perr := ParseEventPacket(packet)

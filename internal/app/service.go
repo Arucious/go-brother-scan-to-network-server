@@ -44,6 +44,7 @@ type Service struct {
 	cfgErr      error
 	hostIP      string
 	registrar   brother.Registrar
+	printerIPs  []net.IP
 	regs        map[string]*RegState
 	jobs        []*Job
 	nextJobID   int
@@ -76,10 +77,27 @@ func (s *Service) Apply(cfg *config.Config) {
 }
 
 func (s *Service) setConfig(cfg *config.Config, cfgErr error) {
+	var printerIPs []net.IP
+	if cfg != nil {
+		host := cfg.Printer.Address
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		cancel()
+		if err != nil {
+			s.log.Warn("could not resolve printer; button events will be rejected until config is reapplied", "err", err)
+		}
+		for _, ip := range ips {
+			printerIPs = append(printerIPs, ip.IP)
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cfg = cfg
 	s.cfgErr = cfgErr
+	s.printerIPs = printerIPs
 	s.regs = map[string]*RegState{}
 	s.registrar = nil
 	if cfg != nil {
@@ -104,7 +122,7 @@ func newRegistrar(p config.Printer) brother.Registrar {
 func (s *Service) Run(ctx context.Context, eventPort int) error {
 	errc := make(chan error, 1)
 	go func() {
-		errc <- brother.Listen(ctx, ":"+strconv.Itoa(eventPort), s.log, s.handleEvent)
+		errc <- brother.Listen(ctx, ":"+strconv.Itoa(eventPort), s.log, s.acceptEvent, s.handleEvent)
 	}()
 	go s.registrationLoop(ctx)
 
@@ -273,7 +291,21 @@ func (s *Service) Snapshot() Snapshot {
 	return snap
 }
 
-func (s *Service) handleEvent(ev brother.Event, from *net.UDPAddr) {
+func (s *Service) acceptEvent(from *net.UDPAddr) bool {
+	if from == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ip := range s.printerIPs {
+		if ip.Equal(from.IP) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) handleEvent(ev brother.Event, _ *net.UDPAddr) {
 	cfg, _ := s.Config()
 	if cfg == nil {
 		s.log.Warn("button pressed but server is not configured")
@@ -335,11 +367,14 @@ func (s *Service) Scan(ctx context.Context, req ScanRequest) (*Job, error) {
 		return nil, fmt.Errorf("target %q does not offer %s", target.Name, fn.Lower())
 	}
 
+	// Drop overlapping requests instead of accumulating an unbounded queue
+	// of goroutines, each of which would eventually scan the document.
+	if !s.scanMu.TryLock() {
+		return nil, errors.New("scanner is busy")
+	}
+	defer s.scanMu.Unlock()
 	job := s.startJob(target.Name, fn.Lower(), req.Trigger)
 	log := s.log.With("job", job.ID, "target", target.Name, "function", fn.Lower())
-
-	s.scanMu.Lock()
-	defer s.scanMu.Unlock()
 	s.setRunning(true)
 	defer s.setRunning(false)
 

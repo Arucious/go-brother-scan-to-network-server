@@ -33,3 +33,27 @@ func TestLocalSaveNoOverwrite(t *testing.T) {
 		t.Fatal("path escape allowed")
 	}
 }
+
+func TestLocalRejectsSymlinkEscape(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.pdf"), []byte("private"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	l := &Local{Root: root}
+	if rc, _, err := l.Open(context.Background(), "escape/secret.pdf"); err == nil {
+		rc.Close()
+		t.Fatal("read escaped destination root")
+	}
+	if _, err := l.Save(context.Background(), []File{{Name: "escape/new.pdf", Data: []byte("scan")}}); err == nil {
+		t.Fatal("write escaped destination root")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "new.pdf")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected outside file: %v", err)
+	}
+	if _, err := l.Save(context.Background(), []File{{Name: "../new.pdf", Data: []byte("scan")}}); err == nil {
+		t.Fatal("parent path accepted")
+	}
+}

@@ -2,6 +2,7 @@ package destination
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
 	"io/fs"
@@ -17,10 +18,22 @@ type Local struct {
 }
 
 func (l *Local) Save(_ context.Context, files []File) ([]Saved, error) {
+	if err := os.MkdirAll(l.Root, 0o700); err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(l.Root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 	var saved []Saved
 	for _, f := range files {
-		name, err := candidates(f.Name, func(n string) (bool, error) {
-			_, err := os.Stat(filepath.Join(l.Root, filepath.FromSlash(n)))
+		clean, err := config.CleanRelPath(f.Name)
+		if err != nil {
+			return saved, err
+		}
+		name, err := candidates(clean, func(n string) (bool, error) {
+			_, err := root.Lstat(filepath.FromSlash(n))
 			if errors.Is(err, fs.ErrNotExist) {
 				return false, nil
 			}
@@ -30,15 +43,23 @@ func (l *Local) Save(_ context.Context, files []File) ([]Saved, error) {
 			return saved, err
 		}
 		full := filepath.Join(l.Root, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		rel := filepath.FromSlash(name)
+		if err := root.MkdirAll(filepath.Dir(rel), 0o700); err != nil {
 			return saved, err
 		}
-		tmp := full + ".part"
-		if err := os.WriteFile(tmp, f.Data, 0o644); err != nil {
+		tmp := filepath.Join(filepath.Dir(rel), ".scan-"+rand.Text()+".part")
+		out, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
 			return saved, err
 		}
-		if err := os.Rename(tmp, full); err != nil {
-			os.Remove(tmp)
+		_, writeErr := out.Write(f.Data)
+		closeErr := out.Close()
+		if err := errors.Join(writeErr, closeErr); err != nil {
+			_ = root.Remove(tmp)
+			return saved, err
+		}
+		if err := root.Rename(tmp, rel); err != nil {
+			_ = root.Remove(tmp)
 			return saved, err
 		}
 		saved = append(saved, Saved{Name: name, Location: full, Size: len(f.Data)})
@@ -51,7 +72,12 @@ func (l *Local) Open(_ context.Context, name string) (io.ReadCloser, int64, erro
 	if err != nil {
 		return nil, 0, err
 	}
-	f, err := os.Open(filepath.Join(l.Root, filepath.FromSlash(clean)))
+	root, err := os.OpenRoot(l.Root)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer root.Close()
+	f, err := root.Open(filepath.FromSlash(clean))
 	if err != nil {
 		return nil, 0, err
 	}

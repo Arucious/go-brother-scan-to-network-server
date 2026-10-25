@@ -13,4 +13,13 @@ rather than public issues. You will get a response within a few days.
   network.
 - Keep secrets out of the config file with `${ENV}` references.
 - The printer protocols are unauthenticated LAN protocols by design: anything
-  that can reach UDP 54925 can trigger a scan of whatever is on the glass.
+  able to spoof the configured printer's source IP can trigger a scan of whatever
+  is on the glass. Other source addresses are rejected before acknowledgement.
+- Browser cross-origin writes are rejected. Invalid configuration fails closed
+  for the web UI; repair the configuration on disk and restart the service.
+- Use a dedicated scan directory. Local reads and writes are confined with
+  `os.Root`, including symlink traversal; newly saved files use mode 0600.
+- Run unprivileged with a read-only container root, no capabilities, memory and
+  process limits, and only the config and scan directories mounted writable.
+- Keep the dashboard on loopback behind SSH, or behind an authenticated TLS
+  reverse proxy. Basic authentication alone does not encrypt HTTP traffic.

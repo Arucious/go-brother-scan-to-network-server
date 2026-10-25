@@ -129,13 +129,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /config", s.saveConfig)
 	mux.HandleFunc("GET /api/status", s.apiStatus)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })
-	return s.basicAuth(mux)
+	return http.NewCrossOriginProtection().Handler(s.basicAuth(mux))
 }
 
 func (s *Server) basicAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg, _ := s.svc.Config()
-		if cfg == nil || cfg.Web.Username == "" || r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if cfg == nil {
+			http.Error(w, "configuration is invalid; repair the configuration file and restart", http.StatusServiceUnavailable)
+			return
+		}
+		if cfg.Web.Username == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
