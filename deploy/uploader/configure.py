@@ -9,6 +9,7 @@ import json
 import os
 import secrets
 import subprocess
+import sys
 import tempfile
 
 base = Path.home() / 'docker/brother-scan/uploader'
@@ -20,20 +21,41 @@ config_dir.mkdir(mode=0o700, exist_ok=True)
 if settings_path.exists() and json.loads(settings_path.read_text()).get('destination'):
     raise SystemExit('Already configured. Stop scan-uploader before deliberately changing its destination.')
 
-def prompt(label, default):
+provided = None
+if sys.argv[1:] == ['--stdin-json']:
+    sys.stdin.reconfigure(encoding='utf-8')
+    payload = sys.stdin.read(65537)
+    if len(payload) > 65536:
+        raise SystemExit('Connection input is too large')
+    provided = json.loads(payload)
+    payload = None
+    allowed = {'host', 'username', 'share', 'subfolder', 'domain', 'password'}
+    if not isinstance(provided, dict) or set(provided) - allowed:
+        raise SystemExit('Invalid connection fields')
+    if any(not isinstance(value, str) for value in provided.values()):
+        raise SystemExit('Connection fields must be strings')
+elif sys.argv[1:]:
+    raise SystemExit('Usage: configure.py [--stdin-json]')
+
+def prompt(key, label, default):
+    if provided is not None:
+        return provided.get(key, default).strip()
     return input(f'{label} [{default}]: ').strip() or default
 
-host = prompt('NAS hostname or IP', '')
-username = prompt('NAS account', '')
-share = prompt('SMB share name', 'Scans')
-subfolder = prompt('Subfolder inside that share', 'Brother')
-domain = prompt('SMB domain', 'WORKGROUP')
+host = prompt('host', 'NAS hostname or IP', '')
+username = prompt('username', 'NAS account', '')
+share = prompt('share', 'SMB share name', 'Scans')
+subfolder = prompt('subfolder', 'Subfolder inside that share', 'Brother')
+domain = prompt('domain', 'SMB domain', 'WORKGROUP')
+if any(not value or any(c in value for c in '\r\n\0') for value in (host, username, share, subfolder, domain)):
+    raise SystemExit('Connection fields must be nonempty single-line values')
 if any(c in host for c in '/\\\r\n') or any(c in share for c in '/\\:\r\n'):
     raise SystemExit('Invalid host or share name')
 if any(p in ('', '.', '..') for p in subfolder.split('/')) or '\\' in subfolder or ':' in subfolder:
     raise SystemExit('Subfolder must be a relative path such as Brother or Inbox/Brother')
-password = getpass.getpass('NAS password (not echoed or saved in shell history): ')
-if not password or '\n' in password or '\r' in password:
+password = provided.pop('password', '') if provided is not None else getpass.getpass('NAS password (not echoed or saved in shell history): ')
+provided = None
+if not password or any(c in password for c in '\r\n\0'):
     raise SystemExit('A nonempty, single-line password is required')
 obscured = subprocess.run([str(rclone), 'obscure', '-'], input=password + '\n',
                           text=True, capture_output=True, check=True).stdout.strip()
