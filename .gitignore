@@ -5,3 +5,7 @@
 *.part
 /dist/
 .DS_Store
+
+# Keep machine-specific deployment notes and setup helpers private.
+/deploy/README.md
+/deploy/uploader/Configure-Scan-Upload.ps1

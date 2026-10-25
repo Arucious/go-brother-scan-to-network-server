@@ -42,7 +42,7 @@ type Destination interface {
 func New(c config.Destination) (Destination, error) {
 	switch c.Type {
 	case "local":
-		return &Local{Root: c.Path}, nil
+		return &Local{Root: c.Path, ArchivePath: c.ArchivePath}, nil
 	case "smb":
 		return &SMB{Config: c}, nil
 	case "ftp":

@@ -1,0 +1,25 @@
+services:
+  scan-uploader:
+    image: local/brother-scan-uploader:v1.75.2-go1.27.3
+    build: ./uploader
+    container_name: brother-scan-uploader
+    restart: unless-stopped
+    stop_grace_period: 400s
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - ./scans:/scans
+      - ./uploader/config:/config:ro
+      - ./uploader/state:/state
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"

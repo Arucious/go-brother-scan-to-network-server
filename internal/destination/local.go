@@ -14,7 +14,8 @@ import (
 
 // Local stores scans in a directory (e.g. a mounted volume).
 type Local struct {
-	Root string
+	Root        string
+	ArchivePath string
 }
 
 func (l *Local) Save(_ context.Context, files []File) ([]Saved, error) {
@@ -34,6 +35,9 @@ func (l *Local) Save(_ context.Context, files []File) ([]Saved, error) {
 		}
 		name, err := candidates(clean, func(n string) (bool, error) {
 			_, err := root.Lstat(filepath.FromSlash(n))
+			if errors.Is(err, fs.ErrNotExist) && l.ArchivePath != "" {
+				_, err = root.Lstat(filepath.Join(filepath.FromSlash(l.ArchivePath), filepath.FromSlash(n)))
+			}
 			if errors.Is(err, fs.ErrNotExist) {
 				return false, nil
 			}
@@ -78,6 +82,9 @@ func (l *Local) Open(_ context.Context, name string) (io.ReadCloser, int64, erro
 	}
 	defer root.Close()
 	f, err := root.Open(filepath.FromSlash(clean))
+	if errors.Is(err, fs.ErrNotExist) && l.ArchivePath != "" {
+		f, err = root.Open(filepath.Join(filepath.FromSlash(l.ArchivePath), filepath.FromSlash(clean)))
+	}
 	if err != nil {
 		return nil, 0, err
 	}

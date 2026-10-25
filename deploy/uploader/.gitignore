@@ -1,0 +1,5 @@
+/rclone
+/config/
+/state/
+__pycache__/
+*.pyc

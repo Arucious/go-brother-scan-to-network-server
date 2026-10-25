@@ -2,6 +2,7 @@ package destination
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,6 +35,33 @@ func TestLocalSaveNoOverwrite(t *testing.T) {
 	}
 }
 
+func TestLocalDownloadAfterUploadAndAvoidArchivedName(t *testing.T) {
+	root := t.TempDir()
+	l := &Local{Root: root, ArchivePath: "uploaded"}
+	if err := os.MkdirAll(filepath.Join(root, "uploaded", "2026"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "uploaded", "2026", "scan.pdf"), []byte("archived"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rc, _, err := l.Open(context.Background(), "2026/scan.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(rc)
+	rc.Close()
+	if err != nil || string(data) != "archived" {
+		t.Fatalf("download: %q %v", data, err)
+	}
+	saved, err := l.Save(context.Background(), []File{{Name: "2026/scan.pdf", Data: []byte("new")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved[0].Name != "2026/scan-1.pdf" {
+		t.Fatalf("reused archived name: %s", saved[0].Name)
+	}
+}
+
 func TestLocalRejectsSymlinkEscape(t *testing.T) {
 	root, outside := t.TempDir(), t.TempDir()
 	if err := os.WriteFile(filepath.Join(outside, "secret.pdf"), []byte("private"), 0o600); err != nil {
@@ -55,5 +83,10 @@ func TestLocalRejectsSymlinkEscape(t *testing.T) {
 	}
 	if _, err := l.Save(context.Background(), []File{{Name: "../new.pdf", Data: []byte("scan")}}); err == nil {
 		t.Fatal("parent path accepted")
+	}
+	l.ArchivePath = "escape"
+	if rc, _, err := l.Open(context.Background(), "secret.pdf"); err == nil {
+		rc.Close()
+		t.Fatal("archive fallback escaped destination root")
 	}
 }

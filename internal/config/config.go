@@ -92,6 +92,9 @@ type Destination struct {
 	// Path is the local directory (local), the directory inside the share or
 	// FTP home (smb, ftp), or the object key prefix (s3).
 	Path string `yaml:"path"`
+	// ArchivePath is an optional relative directory under a local destination.
+	// Downloads fall back here after an uploader moves a completed scan.
+	ArchivePath string `yaml:"archive_path"`
 
 	// smb and ftp
 	Host     string `yaml:"host"`
@@ -317,6 +320,12 @@ func (c *Config) Validate() error {
 		case "local":
 			if d.Path == "" {
 				add("%s: destination.path is required for local destinations", where)
+			}
+			if d.ArchivePath != "" {
+				clean, err := CleanRelPath(d.ArchivePath)
+				if err != nil || clean != d.ArchivePath {
+					add("%s: destination.archive_path must be a clean relative path", where)
+				}
 			}
 		case "smb":
 			if d.Host == "" || d.Share == "" {
